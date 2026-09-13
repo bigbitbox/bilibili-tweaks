@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站优化 · Bilibili Tweaks
 // @namespace    https://github.com/bigbitbox/bilibili-tweaks
-// @version      1.0.2
+// @version      1.1.0
 // @description  统一管理推荐净化、记忆倍速、长按加速与播放器快捷键，所有功能可开关。
 // @author       bigbitbox
 // @license      MIT
@@ -27,7 +27,6 @@
     hold: true, shortcuts: true, numberKeys: true, showTime: false,
     defaultWide: false, copySubtitle: true, rate: 1,
     rates: [0.5, 1, 1.25, 1.5, 2, 2.5, 3, 4], holdA: 3, holdS: 4,
-    holdRight: 2, rightRelative: true,
     keys: { danmaku: 'KeyD', wide: 'KeyB', web: 'KeyG', fullscreen: 'KeyF', subtitle: 'KeyZ' },
   };
   const validRate = value => typeof value === 'number' && Number.isFinite(value) && value >= 0.25 && value <= 16;
@@ -37,7 +36,7 @@
     for (const key of Object.keys(defaults)) {
       if (typeof defaults[key] === 'boolean' && typeof raw[key] === 'boolean') result[key] = raw[key];
     }
-    for (const key of ['rate', 'holdA', 'holdS', 'holdRight']) if (validRate(raw[key])) result[key] = raw[key];
+    for (const key of ['rate', 'holdA', 'holdS']) if (validRate(raw[key])) result[key] = raw[key];
     if (Array.isArray(raw.rates) && raw.rates.length && raw.rates.length <= 30 && raw.rates.every(validRate)) {
       result.rates = [...new Set(raw.rates)].sort((a, b) => a - b);
     }
@@ -52,8 +51,10 @@
     try { GM_setValue(KEY, settings); } catch { toast('设置未能保存，请检查篡改猴存储'); }
   }
   let media = null, player = null, mediaEvents = null, wideApplied = null;
-  let baseRate = settings.rate, rightTimer = null, rightPending = false, toastTimer;
+  let baseRate = settings.rate, spaceTimer = null, spacePending = false, spaceLong = false, toastTimer;
   const held = new Map();
+  const ownedKeys = new Set();
+  const numberRates = { Digit1: 1, Digit2: 1.3, Digit3: 1.5, Digit4: 2 };
   const PLAYER = '.bpx-player-container, .bilibili-player';
   const MEDIA = 'video, bwp-video';
   const controls = {
@@ -102,16 +103,14 @@
         <label>显示按倍速计算的剩余时间<input type="checkbox" data-setting="showTime"></label>
       </section>
       <section><h3>长按加速</h3>
-        <label>启用长按（A / S / →）<input type="checkbox" data-setting="hold"></label>
+        <label>启用长按（A / S / 空格）<input type="checkbox" data-setting="hold"></label>
         <label>A 键倍速<input type="number" data-number="holdA" min="0.25" max="16" step="0.25"></label>
         <label>S 键倍速<input type="number" data-number="holdS" min="0.25" max="16" step="0.25"></label>
-        <label>右方向键倍速<input type="number" data-number="holdRight" min="0.25" max="16" step="0.25"></label>
-        <label>右方向键按当前速度的倍数加速<input type="checkbox" data-setting="rightRelative"></label>
-        <p class="muted">→ 短按前进 5 秒，长按 350ms 加速。松手或切走窗口时恢复。</p>
+        <p class="muted">空格短按播放 / 暂停，长按 350ms 固定 2×。松手或切走窗口时恢复原速；长按不改变暂停状态。右方向键只快进，不加速。</p>
       </section>
       <section><h3>快捷键与显示</h3>
         <label>启用播放器快捷键<input type="checkbox" data-setting="shortcuts"></label>
-        <label>数字键临时倍速 / Ctrl + 数字记忆倍速<input type="checkbox" data-setting="numberKeys"></label>
+        <label>主键盘 1 / 2 / 3 / 4：1× / 1.3× / 1.5× / 2×<input type="checkbox" data-setting="numberKeys"></label>
         <div id="keybindings"></div>
         <label>默认宽屏<input type="checkbox" data-setting="defaultWide"></label>
         <label>双击字幕复制<input type="checkbox" data-setting="copySubtitle"></label>
@@ -218,7 +217,7 @@
     updateTime(); return true;
   }
   function endHolds() {
-    clearTimeout(rightTimer); rightPending = false;
+    clearTimeout(spaceTimer); spacePending = false;
     if (held.size) { held.clear(); setRate(baseRate); }
   }
   function visible(el) { return el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }
@@ -304,25 +303,31 @@
     if (!media?.isConnected || !visible(media)) bindMedia();
     if (!media) return;
     const code = e.code;
-    if (settings.speed && settings.numberKeys && /^Digit[0-9]$/.test(code)) {
-      stop(e); if (e.repeat) return;
-      const rate = Number(code.slice(-1)) || 0.5;
-      if (e.ctrlKey) setPermanent(rate); else holdRate(code, rate);
+    if (settings.speed && settings.numberKeys && !e.ctrlKey && numberRates[code]) {
+      stop(e); ownedKeys.add(code); if (!e.repeat) setPermanent(numberRates[code]);
       return;
     }
     if (settings.speed && e.ctrlKey && ['ArrowUp', 'ArrowDown'].includes(code)) {
       stop(e); if (!e.repeat) cycle(code === 'ArrowUp' ? 1 : -1); return;
     }
     if (e.ctrlKey) return;
-    if (settings.speed && settings.hold && ['KeyA', 'KeyS', 'ArrowRight'].includes(code)) {
-      stop(e); if (e.repeat) return;
-      if (code !== 'ArrowRight') holdRate(code, code === 'KeyA' ? settings.holdA : settings.holdS);
-      else if (!rightPending) {
-        rightPending = true;
-        rightTimer = setTimeout(() => {
-          if (rightPending && media?.isConnected) holdRate(code, settings.holdRight * (settings.rightRelative ? media.playbackRate : 1));
-        }, 350);
-      }
+    if (code === 'Space' && (settings.shortcuts || (settings.speed && settings.hold))) {
+      if (e.composedPath().some(el => el instanceof Element && el.matches('button, a[href], [role="button"]'))) return;
+      stop(e); ownedKeys.add(code); if (e.repeat) return;
+      spacePending = true; spaceLong = false;
+      if (settings.speed && settings.hold) spaceTimer = setTimeout(() => {
+        if (spacePending && media?.isConnected) { spaceLong = true; holdRate(code, 2); }
+      }, 350);
+      return;
+    }
+    if (code === 'ArrowRight' && (settings.hold || settings.shortcuts)) {
+      // 只保留前进，阻止原站的右方向键长按加速监听器。
+      stop(e); ownedKeys.add(code);
+      if (Number.isFinite(media.duration)) media.currentTime = Math.min(media.duration, media.currentTime + 5);
+      return;
+    }
+    if (settings.speed && settings.hold && ['KeyA', 'KeyS'].includes(code)) {
+      stop(e); if (!e.repeat) holdRate(code, code === 'KeyA' ? settings.holdA : settings.holdS);
       return;
     }
     if (!settings.shortcuts) return;
@@ -333,14 +338,21 @@
     if (action === 'subtitle') subtitle();
     else if (action === 'cycle') cycle(1, true);
     else if (action === 'time') { settings.showTime = !settings.showTime; persist(); updateTime(); }
-    else if (action === 'play') { if (media.paused) Promise.resolve(media.play()).catch(() => toast('请先点击播放器开始播放')); else media.pause(); }
+    else if (action === 'play') togglePlayback();
     else clickControl(action);
   }, true);
+  function togglePlayback() {
+    if (!media?.isConnected) return;
+    if (media.paused) Promise.resolve(media.play()).catch(() => toast('请先点击播放器开始播放'));
+    else media.pause();
+  }
   document.addEventListener('keyup', e => {
-    // 无论焦点是否移入输入框，都必须释放已经接管的键。
-    if (e.code === 'ArrowRight' && rightPending) {
-      stop(e); clearTimeout(rightTimer); rightPending = false;
-      if (!release(e.code) && media && Number.isFinite(media.duration)) media.currentTime = Math.min(media.duration, media.currentTime + 5);
+    // 被接管的空格即使因失焦取消，也不能再触发原站 keyup 暂停。
+    if (ownedKeys.delete(e.code)) stop(e);
+    if (e.code === 'Space' && spacePending) {
+      clearTimeout(spaceTimer); spacePending = false;
+      if (spaceLong) release(e.code);
+      else if (!editable(e) && !dialog.open && !e.isComposing) togglePlayback();
     } else if (release(e.code)) stop(e);
   }, true);
   window.addEventListener('blur', endHolds);

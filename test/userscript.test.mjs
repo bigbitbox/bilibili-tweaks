@@ -37,15 +37,15 @@ test('自定义倍速、非法值、排序去重、禁用功能', async () => {
   assert.deepEqual(errors, []); await context.close();
 });
 
-test('A/S 多键栈、数字临时速度、窗口失焦恢复、输入框避让', async () => {
+test('A/S 多键栈、窗口失焦恢复、输入框避让', async () => {
   const { page, context, errors } = await fixture(b, { rate: 1.5 });
   await page.keyboard.down('a'); assert.equal(await rate(page), 3);
   await page.keyboard.down('s'); assert.equal(await rate(page), 4);
   await page.keyboard.up('a'); assert.equal(await rate(page), 4);
   await page.keyboard.up('s'); assert.equal(await rate(page), 1.5);
-  await page.keyboard.down('3'); assert.equal(await rate(page), 3);
+  await page.keyboard.down('a'); assert.equal(await rate(page), 3);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  assert.equal(await rate(page), 1.5); await page.keyboard.up('3');
+  assert.equal(await rate(page), 1.5); await page.keyboard.up('a');
   for (const selector of ['#comment', '#editor', '#shadow-editor input']) {
     await page.locator(selector).focus(); await page.keyboard.type('as23'); assert.equal(await rate(page), 1.5);
   }
@@ -54,15 +54,16 @@ test('A/S 多键栈、数字临时速度、窗口失焦恢复、输入框避让'
   assert.deepEqual(errors, []); await context.close();
 });
 
-test('右方向键短按 seek、长按相对加速后恢复、Ctrl 调速有边界', async () => {
+test('右方向键只快进、阻止原站长按倍速、Ctrl 调速有边界', async () => {
   const { page, context, errors } = await fixture(b, { rate: 1.5 });
   await page.locator('video').evaluate(el => { Object.defineProperty(el, 'duration', { value: 100 }); });
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.locator('video').evaluate(el => el.currentTime), 5);
+  await page.evaluate(() => document.addEventListener('keydown',e=>{if(e.code==='ArrowRight')document.querySelector('video').playbackRate=3}));
   await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400);
-  assert.equal(await rate(page), 3);
+  assert.equal(await rate(page), 1.5);
   await page.keyboard.up('ArrowRight'); assert.equal(await rate(page), 1.5);
-  assert.equal(await page.locator('video').evaluate(el => el.currentTime), 5);
+  assert.equal(await page.locator('video').evaluate(el => el.currentTime), 10);
   await page.keyboard.press('Control+ArrowUp'); assert.equal(await rate(page), 2);
   for (let n=0;n<10;n++) await page.keyboard.press('Control+ArrowUp');
   assert.equal(await rate(page), 4);
@@ -144,7 +145,7 @@ test('隐藏视频变为可见后自动恢复记忆速度', async () => {
   assert.deepEqual(errors,[]); await context.close();
 });
 
-test('默认宽屏重新启用、右方向键以当前临时速度为基准', async () => {
+test('默认宽屏重新启用、空格与 A 键叠加后恢复', async () => {
   const {page,context,errors}=await fixture(b,{rate:1.5,defaultWide:true});
   await panel(page); await page.locator('[data-setting=defaultWide]').uncheck(); await page.locator('[data-setting=defaultWide]').check();
   assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),2);
@@ -153,9 +154,9 @@ test('默认宽屏重新启用、右方向键以当前临时速度为基准', as
   await page.locator('[data-setting=defaultWide]').check();
   assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),2);
   await closePanel(page);
-  await page.keyboard.down('a'); await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400);
-  assert.equal(await rate(page),6);
-  await page.keyboard.up('ArrowRight'); assert.equal(await rate(page),3);
+  await page.keyboard.down('a'); await page.keyboard.down('Space'); await page.waitForTimeout(400);
+  assert.equal(await rate(page),2);
+  await page.keyboard.up('Space'); assert.equal(await rate(page),3);
   await page.keyboard.up('a'); assert.equal(await rate(page),1.5);
   assert.deepEqual(errors,[]); await context.close();
 });
@@ -171,5 +172,48 @@ test('点击真正接收事件的子控件，不能被祖先选择器抢先匹�
   await page.keyboard.press('d');
   assert.equal(await page.locator('.bpx-player-dm-switch input').isChecked(),true);
   await page.keyboard.press('b');assert.equal(await page.evaluate(()=>window.childWide),true);
+  assert.deepEqual(errors,[]);await context.close();
+});
+
+
+test('空格短按播放暂停、长按固定2倍速，失焦取消不误暂停', async () => {
+  const {page,context,errors}=await fixture(b,{rate:1.5});
+  await page.locator('video').evaluate(async el=>{
+    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
+    const stream=canvas.captureStream(20);const recorder=new MediaRecorder(stream);const chunks=[];
+    recorder.ondataavailable=e=>chunks.push(e.data);const done=new Promise(resolve=>recorder.onstop=resolve);
+    recorder.start();const draw=setInterval(()=>canvas.getContext('2d').fillRect(0,0,320,180),40);
+    await new Promise(resolve=>setTimeout(resolve,500));recorder.stop();await done;clearInterval(draw);stream.getTracks().forEach(t=>t.stop());
+    el.src=URL.createObjectURL(new Blob(chunks,{type:recorder.mimeType}));el.muted=true;el.loop=true;await el.play();
+    window.nativeSpaceUps=0;document.addEventListener('keyup',e=>{if(e.code==='Space')window.nativeSpaceUps++});
+  });
+  const paused=()=>page.locator('video').evaluate(el=>el.paused);
+  await page.keyboard.press('Space');assert.equal(await paused(),true);
+  await page.keyboard.press('Space');assert.equal(await paused(),false);
+  await page.keyboard.down('Space');await page.waitForTimeout(400);
+  assert.equal(await rate(page),2);assert.equal(await paused(),false);
+  await page.keyboard.down('Space');await page.keyboard.up('Space');
+  assert.equal(await rate(page),1.5);assert.equal(await paused(),false);
+  await page.keyboard.down('Space');await page.waitForTimeout(400);
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await page.keyboard.up('Space');
+  assert.equal(await rate(page),1.5);assert.equal(await paused(),false);
+  await page.keyboard.down('Space');await page.locator('#comment').focus();await page.keyboard.up('Space');
+  assert.equal(await paused(),false);
+  await page.keyboard.press('Space');assert.equal(await paused(),false);
+  assert.equal(await page.locator('#comment').inputValue(),' ');
+  assert.equal(await page.evaluate(()=>window.nativeSpaceUps),1);
+  assert.deepEqual(errors,[]);await context.close();
+});
+
+test('主键盘1234直接记忆1/1.3/1.5/2，松手不还原且避让组合键', async () => {
+  const {page,context,errors}=await fixture(b);
+  for (const [key,value] of [['1',1],['2',1.3],['3',1.5],['4',2]]) {
+    await page.keyboard.down(key);assert.equal(await rate(page),value);
+    await page.keyboard.up(key);assert.equal(await rate(page),value);
+    assert.equal((await saved(page)).rate,value);
+  }
+  await page.keyboard.press('Control+1');assert.equal(await rate(page),2);
+  await page.keyboard.press('5');assert.equal(await rate(page),2);
+  await page.reload();await page.addScriptTag({content:script});assert.equal(await rate(page),2);
   assert.deepEqual(errors,[]);await context.close();
 });

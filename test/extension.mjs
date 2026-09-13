@@ -90,6 +90,25 @@ try {
     assert.equal(held,3); assert.equal(restored,1.75); assert.equal(shown,true); assert.equal(hidden,true);
     assert.notEqual(dmBefore,dmAfter); assert.notEqual(wide.width,normalWidth); assert.match(web,/mode-webscreen/);
     report.live={url:page.url(),shown,hidden,dmBefore,dmAfter,wide,web,held,restored};
+    for(const [key,value] of [['1',1],['2',1.3],['3',1.5],['4',2]]) {
+      await page.keyboard.press(key);assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),value);
+    }
+    await page.keyboard.press('2');
+    const pausedBefore=await page.locator('video').evaluate(el=>el.paused);
+    await page.keyboard.press('Space');
+    await page.waitForFunction(expected=>document.querySelector('video').paused===expected,!pausedBefore);
+    await page.keyboard.press('Space');
+    await page.waitForFunction(expected=>document.querySelector('video').paused===expected,pausedBefore);
+    await page.keyboard.down('Space');await page.waitForTimeout(400);
+    assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),2);
+    await page.keyboard.up('Space');
+    assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),1.3);
+    assert.equal(await page.locator('video').evaluate(el=>el.paused),pausedBefore);
+    const beforeSeek=await page.locator('video').evaluate(el=>el.currentTime);
+    await page.keyboard.down('ArrowRight');await page.waitForTimeout(400);await page.keyboard.up('ArrowRight');
+    assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),1.3);
+    assert.ok(await page.locator('video').evaluate((el,before)=>el.currentTime>=before+4.5,beforeSeek));
+    report.live.keyboard={digits:[1,1.3,1.5,2],spaceShortToggle:true,spaceHold:2,spaceRestore:1.3,rightSeekWithoutAcceleration:true};
     await page.getByRole('button',{name:'B站优化',exact:true}).click();
     await page.screenshot({path:'test-results/tampermonkey-live.png'});
   }
