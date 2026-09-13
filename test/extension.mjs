@@ -2,7 +2,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { html, script } from './helpers.mjs';
+import { html } from './helpers.mjs';
 if (!process.env.TM_PATH || !process.env.TM_PROFILE) throw new Error('请设置 TM_PATH（扩展程序目录）和 TM_PROFILE（已安装脚本的测试 profile）');
 mkdirSync('test-results', {recursive:true});
 const context=await chromium.launchPersistentContext(process.env.TM_PROFILE,{
@@ -15,17 +15,22 @@ const errors=[]; page.on('pageerror',e=>errors.push(e.message));
 const report={};
 page.on('console', message => { if (message.type()==='error') console.error('console:', message.text().slice(0,500)); });
 try {
-  // 解压加载的测试扩展可能在浏览器重启后要求重存脚本，使用编辑器正常保存当前版本。
+  // 通过公开安装链接重装到独立测试 profile，验证真正的下载/安装路径。
   await page.goto('chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo/options.html#nav=dashboard');
-  await page.getByTitle('Edit', {exact:true}).first().click();
-  await page.locator('.CodeMirror:visible').click();
-  await page.keyboard.press('Meta+a'); await page.keyboard.insertText(script); await page.keyboard.press('Meta+s');
+  await page.locator('.scripttr').filter({hasText:'B站优化 · Bilibili Tweaks'}).waitFor();
+  await page.goto(`https://raw.githubusercontent.com/bigbitbox/bilibili-tweaks/main/bilibili-tweaks.user.js?t=${Date.now()}`).catch(e => {
+    if (!String(e).includes('ERR_ABORTED')) throw e;
+  });
+  let installer;
+  for (let attempt=0;attempt<60;attempt++) {
+    installer=context.pages().find(p=>p.url().includes('/ask.html?aid='));
+    if (installer) break;
+    await page.waitForTimeout(500);
+  }
+  if (!installer) throw new Error('篡改猴安装页未打开');
+  await installer.getByRole('button',{name:/^(Reinstall|Install|Update)$/}).click();
   await page.waitForTimeout(1500);
-  await page.goto('chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo/options.html#nav=dashboard');
-  await page.locator('.scripttr').waitFor();
-  console.log('enabled', await page.locator('.scripttr .enabler').getAttribute('class'));
-
-
+  report.installedFromGitHub=true;
   const routeURL='https://www.bilibili.com/video/BVfixture/';
   await context.route(routeURL,route=>route.fulfill({contentType:'text/html; charset=utf-8',body:html}));
   await page.goto(routeURL);
@@ -63,11 +68,11 @@ try {
     await page.getByRole('button',{name:'关闭设置'}).click();
     await page.locator('body').click({position:{x:2,y:2}});
     const dm=()=>page.locator('.bpx-player-dm-switch').getAttribute('class');
-    const dmBefore=await dm(); await page.keyboard.press('d'); const dmAfter=await dm(); await page.keyboard.press('d');
-    await page.keyboard.press('b');
+    const dmBefore=await dm(); await page.keyboard.press('d'); await page.waitForTimeout(150); const dmAfter=await dm(); await page.keyboard.press('d');
+    await page.keyboard.press('b'); await page.waitForTimeout(150);
     const wide=await page.locator('.bpx-player-container').getAttribute('class');
     await page.keyboard.press('b');
-    await page.keyboard.press('g');
+    await page.keyboard.press('g'); await page.waitForTimeout(150);
     const web=await page.locator('.bpx-player-container').getAttribute('class');
     await page.keyboard.press('g');
     await page.keyboard.down('a'); const held=await page.locator('video').evaluate(el=>el.playbackRate);

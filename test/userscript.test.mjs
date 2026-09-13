@@ -155,3 +155,17 @@ test('默认宽屏重新启用、右方向键以当前临时速度为基准', as
   await page.keyboard.up('a'); assert.equal(await rate(page),1.5);
   assert.deepEqual(errors,[]); await context.close();
 });
+
+test('点击真正接收事件的子控件，不能被祖先选择器抢先匹配', async () => {
+  const {page,context,errors}=await fixture(b);
+  await page.locator('.bpx-player-dm-switch').evaluate(el=>{
+    el.onclick=null; el.innerHTML='<input type="checkbox">';
+  });
+  await page.locator('.bpx-player-ctrl-wide').evaluate(el=>{
+    el.onclick=null;el.innerHTML='<span>宽屏</span>';el.firstChild.onclick=()=>{window.childWide=true};
+  });
+  await page.keyboard.press('d');
+  assert.equal(await page.locator('.bpx-player-dm-switch input').isChecked(),true);
+  await page.keyboard.press('b');assert.equal(await page.evaluate(()=>window.childWide),true);
+  assert.deepEqual(errors,[]);await context.close();
+});

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站优化 · Bilibili Tweaks
 // @namespace    https://github.com/bigbitbox/bilibili-tweaks
-// @version      1.0.0
+// @version      1.0.1
 // @description  统一管理推荐净化、记忆倍速、长按加速与播放器快捷键，所有功能可开关。
 // @author       bigbitbox
 // @license      MIT
@@ -58,9 +58,9 @@
   const MEDIA = 'video, bwp-video';
   const controls = {
     danmaku: '.bpx-player-dm-switch input, .bpx-player-dm-switch, .bilibili-player-video-danmaku-switch input, .bilibili-player-video-danmaku-switch',
-    wide: '.bpx-player-ctrl-wide, .bilibili-player-video-btn-widescreen',
-    web: '.bpx-player-ctrl-web, .bilibili-player-video-web-fullscreen',
-    fullscreen: '.bpx-player-ctrl-full, .bilibili-player-video-btn-fullscreen',
+    wide: '.bpx-player-ctrl-wide span, .bpx-player-ctrl-wide, .bilibili-player-video-btn-widescreen',
+    web: '.bpx-player-ctrl-web span, .bpx-player-ctrl-web, .bilibili-player-video-web-fullscreen',
+    fullscreen: '.bpx-player-ctrl-full span, .bpx-player-ctrl-full, .bilibili-player-video-btn-fullscreen',
   };
   const host = document.createElement('div');
   host.id = 'bt-host';
@@ -228,7 +228,7 @@
   }
   function applyWide() {
     if (!settings.defaultWide || !player || wideApplied === player) return;
-    const button = player.querySelector(controls.wide);
+    const button = findControl('wide');
     if (!button) return;
     if (!player.classList.contains('bpx-state-wide') && !player.classList.contains('mode-widescreen') &&
         !button.classList.contains('bpx-state-active') && button.getAttribute('aria-pressed') !== 'true') button.click();
@@ -275,8 +275,12 @@
   function editable(e) {
     return e.composedPath().some(el => el instanceof Element && (el.matches('input, textarea, select, [role="textbox"], bili-comments, bili-comment-thread-renderer') || el.isContentEditable));
   }
+  function findControl(action) {
+    // querySelector('child, parent') 仍按 DOM 顺序返回 parent，必须显式按优先级查找。
+    return controls[action].split(',').map(selector => player?.querySelector(selector.trim())).find(Boolean);
+  }
   function clickControl(action) {
-    const button = player?.querySelector(controls[action]);
+    const button = findControl(action);
     if (!button) { toast('当前播放器未提供此控件'); return false; }
     button.click(); return true;
   }
