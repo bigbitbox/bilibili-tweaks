@@ -1,0 +1,14 @@
+{
+  "name": "bilibili-tweaks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check bilibili-tweaks.user.js",
+    "test": "node --test test/*.test.mjs",
+    "test:live": "node test/live.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
