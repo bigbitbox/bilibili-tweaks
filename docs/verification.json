@@ -1,0 +1,28 @@
+{
+  "installedVersion": "B站优化 · Bilibili Tweaksv1.0.2",
+  "installedFromGitHub": true,
+  "GMStoragePersisted": true,
+  "pageGMType": "undefined",
+  "fixtureHold": true,
+  "live": {
+    "url": "https://www.bilibili.com/video/BV1Wpb56RE63/",
+    "shown": true,
+    "hidden": true,
+    "dmBefore": "bpx-player-dm-switch bui bui-danmaku-switch bui-danmaku-switch-state-1",
+    "dmAfter": "bpx-player-dm-switch bui bui-danmaku-switch bui-danmaku-switch-state-3",
+    "wide": {
+      "width": 1233,
+      "attributes": {
+        "class": "bpx-player-container bpx-state-no-cursor",
+        "data-revision": "1",
+        "data-locale": "zh-Hans",
+        "data-screen": "wide",
+        "data-ctrl-hidden": "true"
+      }
+    },
+    "web": "mode-webscreen",
+    "held": 3,
+    "restored": 1.75
+  },
+  "errors": []
+}

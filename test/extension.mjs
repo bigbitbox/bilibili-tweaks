@@ -2,7 +2,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { html } from './helpers.mjs';
+import { html, script } from './helpers.mjs';
 if (!process.env.TM_PATH || !process.env.TM_PROFILE) throw new Error('请设置 TM_PATH（扩展程序目录）和 TM_PROFILE（已安装脚本的测试 profile）');
 mkdirSync('test-results', {recursive:true});
 const context=await chromium.launchPersistentContext(process.env.TM_PROFILE,{
@@ -18,7 +18,7 @@ try {
   // 通过公开安装链接重装到独立测试 profile，验证真正的下载/安装路径。
   await page.goto('chrome-extension://dhdgffkkebhmkfjojejmpbldmpobfkfo/options.html#nav=dashboard');
   await page.locator('.scripttr').filter({hasText:'B站优化 · Bilibili Tweaks'}).waitFor();
-  await page.goto(`https://raw.githubusercontent.com/bigbitbox/bilibili-tweaks/main/bilibili-tweaks.user.js?t=${Date.now()}`).catch(e => {
+  await page.goto(process.env.SCRIPT_URL || `https://raw.githubusercontent.com/bigbitbox/bilibili-tweaks/main/bilibili-tweaks.user.js?t=${Date.now()}`).catch(e => {
     if (!String(e).includes('ERR_ABORTED')) throw e;
   });
   let installer;
@@ -28,6 +28,9 @@ try {
     await page.waitForTimeout(500);
   }
   if (!installer) throw new Error('篡改猴安装页未打开');
+  report.installedVersion=await installer.locator('h3').innerText();
+  assert.ok(report.installedVersion.includes(script.match(/@version\s+(\S+)/)[1]),'安装版本必须与本地待验收版本一致');
+  console.log('INSTALL',report.installedVersion);
   await installer.getByRole('button',{name:/^(Reinstall|Install|Update)$/}).click();
   await page.waitForTimeout(1500);
   report.installedFromGitHub=true;
