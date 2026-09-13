@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站优化 · Bilibili Tweaks
 // @namespace    https://github.com/bigbitbox/bilibili-tweaks
-// @version      1.1.0
+// @version      1.2.0
 // @description  统一管理推荐净化、记忆倍速、长按加速与播放器快捷键，所有功能可开关。
 // @author       bigbitbox
 // @license      MIT
@@ -27,7 +27,7 @@
     hold: true, shortcuts: true, numberKeys: true, showTime: false,
     defaultWide: false, copySubtitle: true, rate: 1,
     rates: [0.5, 1, 1.25, 1.5, 2, 2.5, 3, 4], holdA: 3, holdS: 4,
-    keys: { danmaku: 'KeyD', wide: 'KeyB', web: 'KeyG', fullscreen: 'KeyF', subtitle: 'KeyZ' },
+    keys: { danmaku: 'KeyD', wide: 'KeyB', web: 'KeyF', fullscreen: 'Meta+KeyF', subtitle: 'KeyZ' },
   };
   const validRate = value => typeof value === 'number' && Number.isFinite(value) && value >= 0.25 && value <= 16;
   function normalize(raw) {
@@ -40,9 +40,14 @@
     if (Array.isArray(raw.rates) && raw.rates.length && raw.rates.length <= 30 && raw.rates.every(validRate)) {
       result.rates = [...new Set(raw.rates)].sort((a, b) => a - b);
     }
-    // 单字母重映射，保留长按键和浏览器组合键；整个键表原子校验。
-    if (raw.keys && Object.keys(defaults.keys).every(k => /^Key[B-Z]$/.test(raw.keys[k]) && raw.keys[k] !== 'KeyS') &&
-        new Set(Object.values(raw.keys)).size === Object.keys(defaults.keys).length) result.keys = Object.fromEntries(Object.keys(defaults.keys).map(key => [key, raw.keys[key]]));
+    // 迁移旧默认键位；保留用户自行配置的其他键位。
+    const keys = raw.keys && { ...raw.keys };
+    if (keys?.web === 'KeyG' && keys.fullscreen === 'KeyF') { keys.web = 'KeyF'; keys.fullscreen = 'Meta+KeyF'; }
+    if (keys && Object.keys(defaults.keys).every(k =>
+      (k === 'fullscreen' ? /^(Meta\+)?Key[B-Z]$/ : /^Key[B-Z]$/).test(keys[k]) && !['KeyA', 'KeyS'].includes(keys[k])) &&
+      new Set(Object.keys(defaults.keys).map(k => keys[k])).size === Object.keys(defaults.keys).length) {
+      result.keys = Object.fromEntries(Object.keys(defaults.keys).map(key => [key, keys[key]]));
+    }
     return result;
   }
   let settings;
@@ -114,7 +119,7 @@
         <div id="keybindings"></div>
         <label>默认宽屏<input type="checkbox" data-setting="defaultWide"></label>
         <label>双击字幕复制<input type="checkbox" data-setting="copySubtitle"></label>
-        <p class="muted">点击键位后按字母修改。保留小键盘 7 / 9 / * / + / − / 5。Ctrl + ↑ / ↓ 调速，F2 切换剩余时间。输入文字时快捷键自动避让。</p>
+        <p class="muted">点击键位后按字母修改；全屏支持 ⌘ 组合键。保留小键盘 7 / 9 / * / + / − / 5。Ctrl + ↑ / ↓ 调速，F2 切换剩余时间。输入文字时快捷键自动避让。</p>
       </section>
       <footer><p id="error" role="status"></p><span class="muted">更改自动保存</span> <button id="reset">恢复默认</button></footer>
     </dialog>
@@ -150,7 +155,7 @@
       button.addEventListener('click', () => setPermanent(rate));
       return button;
     }));
-    shadow.querySelectorAll('[data-key]').forEach(el => { el.value = settings.keys[el.dataset.key].slice(3); });
+    shadow.querySelectorAll('[data-key]').forEach(el => { el.value = settings.keys[el.dataset.key].replace('Meta+Key', '⌘').replace('Key', ''); });
   }
   for (const [action, title] of Object.entries({ danmaku: '开关弹幕', wide: '宽屏模式', web: '网页全屏', fullscreen: '全屏', subtitle: '开关字幕' })) {
     const label = document.createElement('label');
@@ -160,9 +165,10 @@
     input.addEventListener('keydown', e => {
       if (e.code === 'Tab' || e.code === 'Escape') return;
       e.preventDefault(); e.stopPropagation();
-      if (e.ctrlKey || e.altKey || e.metaKey || !/^Key[B-Z]$/.test(e.code) || e.code === 'KeyS') return error('请选择 A、S 以外的字母');
-      if (Object.entries(settings.keys).some(([key, value]) => key !== action && value === e.code)) return error('这个键位已被使用');
-      settings.keys[action] = e.code; persist(); render(); error();
+      if (e.ctrlKey || e.altKey || e.shiftKey || (e.metaKey && action !== 'fullscreen') || !/^Key[B-Z]$/.test(e.code) || e.code === 'KeyS') return error('请选择 A、S 以外的字母；全屏允许搭配 ⌘');
+      const binding = (e.metaKey ? 'Meta+' : '') + e.code;
+      if (Object.entries(settings.keys).some(([key, value]) => key !== action && value === binding)) return error('这个键位已被使用');
+      settings.keys[action] = binding; persist(); render(); error();
     });
     label.append(input); $('#keybindings').append(label);
   }
@@ -298,11 +304,18 @@
     setPermanent(direction > 0 ? rates.find(r => r > current + 0.001) ?? (wrap ? rates[0] : rates.at(-1)) : [...rates].reverse().find(r => r < current - 0.001) ?? rates[0]);
   }
   const stop = e => { e.preventDefault(); e.stopImmediatePropagation(); };
-  document.addEventListener('keydown', e => {
-    if (e.defaultPrevented || e.isComposing || editable(e) || dialog.open || e.metaKey || e.altKey || e.shiftKey) return;
+  // BewlyCat 等扩展在 window 捕获阶段响应 B/G/H，document 监听无法拦截。
+  window.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.isComposing || editable(e) || dialog.open || e.altKey || e.shiftKey) return;
     if (!media?.isConnected || !visible(media)) bindMedia();
     if (!media) return;
     const code = e.code;
+    if (e.metaKey) {
+      if (!e.ctrlKey && settings.shortcuts && settings.keys.fullscreen === `Meta+${code}`) {
+        stop(e); ownedKeys.add(code); if (!e.repeat) clickControl('fullscreen');
+      }
+      return;
+    }
     if (settings.speed && settings.numberKeys && !e.ctrlKey && numberRates[code]) {
       stop(e); ownedKeys.add(code); if (!e.repeat) setPermanent(numberRates[code]);
       return;
@@ -332,9 +345,9 @@
     }
     if (!settings.shortcuts) return;
     const action = Object.keys(settings.keys).find(k => settings.keys[k] === code) ||
-      ({ Numpad7: 'danmaku', Numpad9: 'fullscreen', NumpadMultiply: 'wide', NumpadSubtract: 'web', Numpad5: 'play', NumpadAdd: 'cycle', KeyH: 'wide', F2: 'time' })[code];
+      ({ Numpad7: 'danmaku', Numpad9: 'fullscreen', NumpadMultiply: 'wide', NumpadSubtract: 'web', Numpad5: 'play', NumpadAdd: 'cycle', KeyH: 'wide', KeyG: 'web', F2: 'time' })[code];
     if (!action || (action === 'cycle' && !settings.speed)) return;
-    stop(e); if (e.repeat) return;
+    stop(e); ownedKeys.add(code); if (e.repeat) return;
     if (action === 'subtitle') subtitle();
     else if (action === 'cycle') cycle(1, true);
     else if (action === 'time') { settings.showTime = !settings.showTime; persist(); updateTime(); }
@@ -346,7 +359,7 @@
     if (media.paused) Promise.resolve(media.play()).catch(() => toast('请先点击播放器开始播放'));
     else media.pause();
   }
-  document.addEventListener('keyup', e => {
+  window.addEventListener('keyup', e => {
     // 被接管的空格即使因失焦取消，也不能再触发原站 keyup 暂停。
     if (ownedKeys.delete(e.code)) stop(e);
     if (e.code === 'Space' && spacePending) {

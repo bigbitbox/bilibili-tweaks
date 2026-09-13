@@ -72,7 +72,7 @@ test('右方向键只快进、阻止原站长按倍速、Ctrl 调速有边界', 
 
 test('B/G/D/F 控件、键位重映射与冲突校验、关闭快捷键', async () => {
   const { page, context, errors } = await fixture(b);
-  for (const key of ['b', 'g', 'd', 'f']) await page.keyboard.press(key);
+  for (const key of ['b', 'f', 'd', 'Meta+f']) await page.keyboard.press(key);
   const clicks = await page.evaluate(() => window.clicks);
   for (const cls of ['bpx-player-ctrl-wide', 'bpx-player-ctrl-web', 'bpx-player-dm-switch', 'bpx-player-ctrl-full']) assert.equal(clicks[cls], 1);
   await panel(page);
@@ -215,5 +215,36 @@ test('主键盘1234直接记忆1/1.3/1.5/2，松手不还原且避让组合键',
   await page.keyboard.press('Control+1');assert.equal(await rate(page),2);
   await page.keyboard.press('5');assert.equal(await rate(page),2);
   await page.reload();await page.addScriptTag({content:script});assert.equal(await rate(page),2);
+  assert.deepEqual(errors,[]);await context.close();
+});
+
+test('抢先拦截 BewlyCat 风格的 window 捕获快捷键，并消费 keyup', async () => {
+  const {page,context,errors}=await fixture(b);
+  await page.evaluate(()=>{
+    window.titleOverlay=0;window.foreignKeyups=0;
+    window.addEventListener('keydown',e=>{
+      if(e.code==='KeyB' && !e.target.matches('input,textarea')){e.preventDefault();e.stopImmediatePropagation();window.titleOverlay++;}
+    },true);
+    window.addEventListener('keyup',e=>{if(e.code==='KeyB')window.foreignKeyups++},true);
+  });
+  await page.keyboard.press('b');
+  assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),1);
+  assert.equal(await page.evaluate(()=>window.titleOverlay),0);
+  assert.equal(await page.evaluate(()=>window.foreignKeyups),0);
+  await page.locator('#comment').focus();await page.keyboard.type('b');
+  assert.equal(await page.locator('#comment').inputValue(),'b');
+  assert.deepEqual(errors,[]);await context.close();
+});
+
+
+test('旧键位迁移为 F 网页全屏 / Meta+F 真全屏，不拦截其他 Meta 组合', async () => {
+  const {page,context,errors}=await fixture(b,{keys:{danmaku:'KeyD',wide:'KeyB',web:'KeyG',fullscreen:'KeyF',subtitle:'KeyZ'}});
+  await page.keyboard.press('f');await page.keyboard.press('Meta+f');
+  assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-web']),1);
+  assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-full']),1);
+  await page.keyboard.press('Meta+b');
+  assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),undefined);
+  await panel(page);assert.equal(await page.locator('[data-key=web]').inputValue(),'F');
+  assert.equal(await page.locator('[data-key=fullscreen]').inputValue(),'⌘F');
   assert.deepEqual(errors,[]);await context.close();
 });
