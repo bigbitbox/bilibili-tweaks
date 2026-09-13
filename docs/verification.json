@@ -1,11 +1,18 @@
 {
-  "installedVersion": "B站优化 · Bilibili Tweaksv1.1.0",
+  "installedVersion": "B站优化 · Bilibili Tweaksv1.2.0",
   "installedFromGitHub": true,
   "GMStoragePersisted": true,
   "pageGMType": "undefined",
   "fixtureHold": true,
   "live": {
-    "url": "https://www.bilibili.com/video/BV1Wpb56RE63/",
+    "fullscreenHolds": [
+      "normal",
+      "web",
+      "fullscreen"
+    ],
+    "bewlyLoaded": true,
+    "titleOverlayUnchanged": true,
+    "url": "https://www.bilibili.com/video/BV16i816gE7v/",
     "shown": true,
     "hidden": true,
     "dmBefore": "bpx-player-dm-switch bui bui-danmaku-switch bui-danmaku-switch-state-1",
@@ -13,11 +20,12 @@
     "wide": {
       "width": 1233,
       "attributes": {
-        "class": "bpx-player-container bpx-state-no-cursor",
+        "class": "bpx-player-container bewly-vertical-video-zoom-host bpx-state-no-cursor",
         "data-revision": "1",
         "data-locale": "zh-Hans",
         "data-screen": "wide",
-        "data-ctrl-hidden": "true"
+        "data-ctrl-hidden": "true",
+        "style": "--bewly-vertical-video-zoom-y: 50%;"
       }
     },
     "web": "mode-webscreen",

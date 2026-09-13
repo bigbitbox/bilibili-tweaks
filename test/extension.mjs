@@ -47,7 +47,7 @@ try {
   await page.reload();
   await page.getByRole('button',{name:'B站优化',exact:true}).waitFor();
   assert.equal(await page.locator('.rec-list').isVisible(),true);
-  assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),1.75);
+  await page.waitForFunction(()=>document.querySelector('video')?.playbackRate===1.75);
   report.GMStoragePersisted=true;
   report.pageGMType=await page.evaluate(()=>typeof window.GM_getValue);
   await page.keyboard.down('a'); assert.equal(await page.locator('video').evaluate(el=>el.playbackRate),3);
@@ -59,6 +59,7 @@ try {
   await context.unroute(routeURL);
   if (process.env.VIDEO_URL) {
     await page.goto(process.env.VIDEO_URL,{waitUntil:'domcontentloaded',timeout:60000});
+    await page.bringToFront();
     await page.getByRole('button',{name:'B站优化',exact:true}).waitFor({timeout:30000});
     await page.waitForFunction(()=>document.querySelector('video')?.readyState>=2,{},{timeout:45000});
     await page.waitForTimeout(2000);
@@ -105,6 +106,7 @@ try {
     const web=await page.locator('#bilibili-player').getAttribute('class');
     await verifyHolds('web');
     await page.keyboard.press('f');
+    await page.bringToFront();
     await page.keyboard.press('Meta+f');
     await page.waitForFunction(()=>!!document.fullscreenElement);
     await verifyHolds('fullscreen');
