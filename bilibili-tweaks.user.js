@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         B站优化 · Bilibili Tweaks
 // @namespace    https://github.com/bigbitbox/bilibili-tweaks
-// @version      1.0.1
+// @version      1.0.2
 // @description  统一管理推荐净化、记忆倍速、长按加速与播放器快捷键，所有功能可开关。
 // @author       bigbitbox
 // @license      MIT
@@ -230,7 +230,9 @@
     if (!settings.defaultWide || !player || wideApplied === player) return;
     const button = findControl('wide');
     if (!button) return;
-    if (!player.classList.contains('bpx-state-wide') && !player.classList.contains('mode-widescreen') &&
+    const screen = player.getAttribute('data-screen');
+    if (screen && screen !== 'normal' && screen !== 'wide') return;
+    if (screen !== 'wide' && !player.classList.contains('bpx-state-wide') && !player.classList.contains('mode-widescreen') &&
         !button.classList.contains('bpx-state-active') && button.getAttribute('aria-pressed') !== 'true') button.click();
     wideApplied = player;
   }

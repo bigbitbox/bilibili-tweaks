@@ -148,6 +148,10 @@ test('默认宽屏重新启用、右方向键以当前临时速度为基准', as
   const {page,context,errors}=await fixture(b,{rate:1.5,defaultWide:true});
   await panel(page); await page.locator('[data-setting=defaultWide]').uncheck(); await page.locator('[data-setting=defaultWide]').check();
   assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),2);
+  await page.locator('[data-setting=defaultWide]').uncheck();
+  await page.locator('.bpx-player-container').evaluate(el=>el.setAttribute('data-screen','wide'));
+  await page.locator('[data-setting=defaultWide]').check();
+  assert.equal(await page.evaluate(()=>clicks['bpx-player-ctrl-wide']),2);
   await closePanel(page);
   await page.keyboard.down('a'); await page.keyboard.down('ArrowRight'); await page.waitForTimeout(400);
   assert.equal(await rate(page),6);

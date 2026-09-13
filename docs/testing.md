@@ -33,7 +33,7 @@
 
 ## 篡改猴加载测试
 
-使用与用户一致的 Tampermonkey 5.5.0 扩展程序文件，在虚拟机独立 Chromium profile 中加载，开启 Allow User Scripts，并通过编辑器安装当前脚本；没有复制扩展的私人存储。
+使用与用户一致的 Tampermonkey 5.5.0 扩展程序文件，在虚拟机独立 Chromium profile 中加载，开启 Allow User Scripts，先通过编辑器准备测试脚本，再从公开 GitHub 安装链接完成真实安装；没有复制扩展的私人存储。
 
 解压加载的扩展在浏览器重启后可能触发脚本来源校验。`test/extension.mjs` 会从公开仓库重新安装当前脚本，再验证页面。没有关闭篡改猴的来源检查。
 
@@ -46,7 +46,7 @@ VIDEO_URL=https://www.bilibili.com/video/BV1Wpb56RE63/ \
 node test/extension.mjs
 ```
 
-此脚本会验证实际 GM 存储跨页面刷新、推荐开关、长按恢复，以及真实页面中的弹幕、宽屏、网页全屏。实站测试为可选联网测试，不放入 CI。
+实测通过：GitHub 安装流程、实际 GM 存储跨页面刷新、推荐开关、长按恢复，以及真实页面中的弹幕、宽屏、网页全屏。普通页面的 `window.GM_getValue` 为 undefined，测试未注入 GM 替身；数据由篡改猴实际保存。宽屏后实际宽度为 1233px，`data-screen=wide`；网页全屏后原站标记为 `mode-webscreen`。没有捕获页面 JavaScript 异常。实站测试为可选联网测试，不放入 CI。
 
 ## 尚未覆盖
 
